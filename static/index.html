@@ -4,214 +4,568 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sports Odds Research Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* ---------------------------------------------------------------------
+     Design tokens. Every colour is a role, never a raw hex in the body, so
+     light and dark swap in one place. Status colours are reserved: the amber
+     is only ever the flag, and it always ships with an icon and a label so
+     meaning never rests on colour alone.
+     --------------------------------------------------------------------- */
   :root {
-    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --line: #e0e0e0;
-    --flag-bg: #fff8e1; --flag-line: #f0b429; --warn-bg: #fff4e5;
-    --warn-fg: #7a4a00; --err-bg: #fdecea; --err-fg: #8b1a10;
+    color-scheme: light;
+    --plane:        #f9f9f7;   /* page background */
+    --surface:      #fcfcfb;   /* cards, table */
+    --surface-alt:  #f4f4f1;   /* table header, hover */
+    --ink:          #0b0b0b;
+    --ink-2:        #52514e;
+    --ink-muted:    #898781;
+    --line:         #e1e0d9;
+    --line-strong:  #d2d1c8;
+
+    --status-warning: #fab219;  /* the flag, and nothing else */
+    --status-warning-ink:  #5c3f00;
+    --status-warning-bg:   #fff9e8;
+    --status-critical:     #d03b3b;
+    --status-critical-bg:  #fdf0f0;
+
+    --accent:       #2a78d6;
+    --radius:       10px;
+    --radius-sm:    6px;
+    --shadow: 0 1px 2px rgba(11,11,11,.05), 0 1px 3px rgba(11,11,11,.04);
   }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16181c; --fg: #e8e8e8; --muted: #9aa0a6; --line: #2e3238;
-      --flag-bg: #2e2510; --flag-line: #b8860b; --warn-bg: #2e2510;
-      --warn-fg: #f0c674; --err-bg: #2e1614; --err-fg: #f2a196;
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:       #0d0d0d;
+      --surface:     #1a1a19;
+      --surface-alt: #232322;
+      --ink:         #ffffff;
+      --ink-2:       #c3c2b7;
+      --ink-muted:   #898781;
+      --line:        #2c2c2a;
+      --line-strong: #3a3a37;
+
+      --status-warning-ink: #fdd87a;
+      --status-warning-bg:  #2a2109;
+      --status-critical-bg: #2a1414;
+      --accent:      #3987e5;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3);
     }
   }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:       #0d0d0d;
+    --surface:     #1a1a19;
+    --surface-alt: #232322;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --ink-muted:   #898781;
+    --line:        #2c2c2a;
+    --line-strong: #3a3a37;
+    --status-warning-ink: #fdd87a;
+    --status-warning-bg:  #2a2109;
+    --status-critical-bg: #2a1414;
+    --accent:      #3987e5;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3);
+  }
+
   * { box-sizing: border-box; }
+
   body {
-    margin: 0; padding: 0 16px 48px; background: var(--bg); color: var(--fg);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 0 16px 64px;
+    background: var(--plane);
+    color: var(--ink);
+    font: 400 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  /* --- mock-data notice: reserved status colour, with icon + label -------- */
   .banner {
-    background: var(--warn-bg); color: var(--warn-fg);
-    border: 1px solid var(--flag-line); border-radius: 6px;
-    padding: 10px 14px; margin: 16px 0; font-weight: 600;
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
+    border: 1px solid var(--status-warning);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin: 20px 0 28px;
+    font-size: .875rem;
   }
-  h1 { font-size: 1.35rem; margin: 20px 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-  label { font-weight: 600; }
+  .banner svg { flex: none; margin-top: 1px; }
+  .banner strong { font-weight: 600; }
+
+  /* --- header ------------------------------------------------------------ */
+  header { margin-bottom: 24px; }
+  h1 {
+    font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em;
+    margin: 0 0 6px;
+  }
+  .sub { color: var(--ink-2); margin: 0; font-size: .9375rem; max-width: 62ch; }
+
+  /* --- controls ---------------------------------------------------------- */
+  .toolbar {
+    display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;
+    padding: 16px 18px; margin-bottom: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: .75rem; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-muted);
+  }
   input[type=date] {
-    font: inherit; padding: 6px 8px; border: 1px solid var(--line);
-    border-radius: 5px; background: var(--bg); color: var(--fg);
+    font: inherit; font-size: .9375rem;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink);
+    min-width: 168px;
   }
-  .summary { color: var(--muted); margin: 12px 0; }
-  .summary strong { color: var(--fg); }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); }
-  th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.flagged { background: var(--flag-bg); box-shadow: inset 3px 0 0 var(--flag-line); }
-  .rec { color: var(--muted); font-size: .85em; }
+  input[type=date]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent);
+  }
+
+  /* --- summary stat tiles ------------------------------------------------ */
+  .stats { display: flex; gap: 28px; margin-left: auto; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat .value {
+    font-size: 1.5rem; font-weight: 700; line-height: 1.1;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .stat .label {
+    font-size: .75rem; font-weight: 500; color: var(--ink-muted);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .stat.is-flagged .value { color: var(--status-warning-ink); }
+
+  /* --- table ------------------------------------------------------------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--surface-alt);
+    font-size: .6875rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-muted);
+    text-align: left;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background-color .12s ease; }
+  tbody tr:hover { background: var(--surface-alt); }
+
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .time { color: var(--ink-2); font-size: .875rem; }
+
+  .team { font-weight: 500; }
+  .team .meta {
+    display: block; margin-top: 2px;
+    font-size: .8125rem; font-weight: 400; color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* The better of the two teams, so the comparison the tool makes is legible
+     in the row itself rather than only in the badge. */
+  .team.is-better .name::after {
+    content: "";
+    display: inline-block; width: 5px; height: 5px; margin-left: 6px;
+    border-radius: 50%; background: var(--accent);
+    vertical-align: middle;
+  }
+
+  /* Favourite/underdog prices read differently at a glance. */
+  .odds-pair { display: flex; gap: 6px; align-items: baseline; }
+  .odds { font-variant-numeric: tabular-nums; }
+  .odds.fav { font-weight: 600; }
+  .odds.dog { color: var(--ink-2); }
+  /* A pick'em has no favourite, so neither side is weighted. */
+  .odds.even { color: var(--ink-2); }
+  .sep { color: var(--ink-muted); }
+
+  /* --- flag: reserved status colour + icon + text ------------------------ */
+  tr.flagged { background: var(--status-warning-bg); }
+  tr.flagged:hover { background: var(--status-warning-bg); filter: brightness(.985); }
+  tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--status-warning); }
+
   .badge {
-    display: inline-block; padding: 3px 8px; border-radius: 999px;
-    font-size: .78rem; font-weight: 600; white-space: nowrap; cursor: help;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px 4px 7px;
+    border-radius: 999px;
+    font-size: .75rem; font-weight: 600; white-space: nowrap;
   }
-  .badge.flag { background: var(--flag-line); color: #241a00; }
-  .badge.na { background: var(--line); color: var(--muted); }
-  .badge.none { color: var(--muted); }
-  .state { padding: 36px 8px; text-align: center; color: var(--muted); }
+  .badge.flag {
+    background: var(--status-warning);
+    color: #3d2900;
+    cursor: help;
+  }
+  .badge.na {
+    background: transparent; color: var(--ink-muted);
+    border: 1px dashed var(--line-strong);
+    cursor: help;
+  }
+  .badge.none { color: var(--ink-muted); font-weight: 400; }
+
+  /* --- states ------------------------------------------------------------ */
+  .state {
+    padding: 56px 24px; text-align: center; color: var(--ink-2);
+  }
+  .state .icon { margin-bottom: 12px; color: var(--ink-muted); }
+  .state .title { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
   .state.error {
-    background: var(--err-bg); color: var(--err-fg); border-radius: 6px;
-    text-align: left; padding: 14px 16px;
+    text-align: left; display: flex; gap: 12px; align-items: flex-start;
+    padding: 18px 20px;
+    background: var(--status-critical-bg);
+    border: 1px solid var(--status-critical);
+    border-radius: var(--radius);
+    color: var(--ink);
   }
-  footer { margin-top: 28px; color: var(--muted); font-size: .85rem; }
+  .state.error .icon { color: var(--status-critical); margin: 0; flex: none; }
+
+  .spinner {
+    width: 18px; height: 18px; margin: 0 auto 12px;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: 2s; }
+    tbody tr { transition: none; }
+  }
+
+  footer {
+    margin-top: 24px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-muted); font-size: .8125rem;
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+  @media (max-width: 720px) {
+    .stats { margin-left: 0; width: 100%; }
+    thead th, tbody td { padding-left: 12px; padding-right: 12px; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="banner">
-    &#9888; Odds are MOCKED for demonstration. Game and record data is live from ESPN.
+
+  <div class="banner" role="note">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M8 6.5v3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="8" cy="11.8" r=".9" fill="currentColor"/>
+    </svg>
+    <span><strong>Odds are mocked for demonstration.</strong> Games, teams and win-loss
+    records are live from ESPN; the betting prices are generated by this tool.</span>
   </div>
 
-  <h1>Sports Odds Research Tool</h1>
-  <p class="sub">MLB &middot; flags games where the team with the better record is priced as the underdog.</p>
+  <header>
+    <h1>Sports Odds Research Tool</h1>
+    <p class="sub">
+      MLB · flags games where the team with the better record is priced as the underdog.
+    </p>
+  </header>
 
-  <div class="controls">
-    <label for="date">Date</label>
-    <input type="date" id="date">
+  <div class="toolbar">
+    <div class="field">
+      <label for="date">Date</label>
+      <input type="date" id="date">
+    </div>
+    <div class="stats" id="stats" aria-live="polite"></div>
   </div>
 
-  <div id="summary" class="summary"></div>
   <div id="content"></div>
 
   <footer>
-    Not betting advice. Ranking is season win percentage; it ignores injuries,
-    starting pitchers and schedule strength.
+    <span class="legend-item"><span class="dot"></span> Better record</span>
+    <span class="legend-item">
+      <span class="badge flag" style="pointer-events:none">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M8 6.3v3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="8" cy="11.9" r="1" fill="currentColor"/>
+        </svg>Favorite Undervalued</span>
+      the better team is the underdog
+    </span>
+    <span>Not betting advice. Ranking is season win percentage; it ignores injuries,
+    starting pitchers and schedule strength.</span>
   </footer>
 </div>
 
 <script>
 const content = document.getElementById('content');
-const summary = document.getElementById('summary');
+const statsEl = document.getElementById('stats');
 const picker  = document.getElementById('date');
 
-const pct  = v => v == null ? '—' : (v * 100).toFixed(1) + '%';
-const ml   = v => v > 0 ? '+' + v : String(v);
+const EM_DASH = '—';
+const pct = v => v == null ? EM_DASH : (v * 100).toFixed(1) + '%';
+const ml  = v => (v > 0 ? '+' : '') + v;
+
 // MLB schedules are quoted in US Eastern time, so the table pins itself there
-// rather than following the viewer's locale. Without this, a start time reads
-// as the small hours of the morning to anyone outside North America.
+// rather than following the viewer's locale. Without this a US evening slate
+// reads as the small hours of the morning to anyone outside North America.
 const time = iso => {
-  if (!iso) return '—';
+  if (!iso) return EM_DASH;
   const d = new Date(iso);
-  if (isNaN(d)) return '—';
+  if (isNaN(d)) return EM_DASH;
   return d.toLocaleTimeString('en-US', {
     hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
   });
 };
 
-/** Build a cell naming a team, with its record and win % underneath. */
-function teamCell(t) {
+const WARN_ICON =
+  '<path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+  '<path d="M8 6.3v3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+  '<circle cx="8" cy="11.9" r="1" fill="currentColor"/>';
+
+function svg(paths, size) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 16 16');
+  s.setAttribute('width', size); s.setAttribute('height', size);
+  s.setAttribute('fill', 'none');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = paths;          // static markup defined above, never user data
+  return s;
+}
+
+/** One team: name, record and win %. Marked when it is the better side. */
+function teamCell(t, isBetter) {
   const td = document.createElement('td');
+  td.className = 'team' + (isBetter ? ' is-better' : '');
+
+  const name = document.createElement('span');
+  name.className = 'name';
   // textContent, never innerHTML: these names come from an external API.
-  td.textContent = t.name || t.abbr || 'Unknown';
-  const rec = document.createElement('div');
-  rec.className = 'rec';
-  rec.textContent = (t.record || 'no record') + ' · ' + pct(t.win_pct);
-  td.appendChild(rec);
+  name.textContent = t.name || t.abbr || 'Unknown';
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  meta.textContent = (t.record || 'no record') + '  ·  ' + pct(t.win_pct);
+
+  td.append(name, meta);
+  return td;
+}
+
+/** Both prices, with the favourite weighted so the market's pick is scannable.
+ *
+ *  The favourite is the *lower* price, not simply a negative one. Two teams can
+ *  both be negative (-100 / -120), and in a pick'em neither side is favoured at
+ *  all -- weighting on the minus sign alone would bold both halves of -110/-110
+ *  and claim a favourite that does not exist. */
+function oddsCell(odds) {
+  const td = document.createElement('td');
+  td.className = 'num';
+  if (!odds) { td.textContent = EM_DASH; return td; }
+
+  const pickem = odds.away === odds.home;
+  const favSide = odds.away < odds.home ? 'away' : 'home';
+
+  const wrap = document.createElement('span');
+  wrap.className = 'odds-pair';
+  [['away', odds.away], ['home', odds.home]].forEach(([side, v], i) => {
+    if (i) {
+      const sep = document.createElement('span');
+      sep.className = 'sep'; sep.textContent = '/';
+      wrap.appendChild(sep);
+    }
+    const s = document.createElement('span');
+    s.className = 'odds ' + (pickem ? 'even' : side === favSide ? 'fav' : 'dog');
+    s.textContent = ml(v);
+    wrap.appendChild(s);
+  });
+  td.appendChild(wrap);
   return td;
 }
 
 function flagCell(flag) {
   const td = document.createElement('td');
-  const span = document.createElement('span');
   const state = flag ? flag.favorite_undervalued : null;
+
   if (state === true) {
-    span.className = 'badge flag';
-    span.textContent = '⚠ Favorite Undervalued';
+    const b = document.createElement('span');
+    b.className = 'badge flag';
+    b.append(svg(WARN_ICON, 11), document.createTextNode('Favorite Undervalued'));
+    if (flag.reason) b.title = flag.reason;
+    td.appendChild(b);
   } else if (state === null) {
-    // N/A is deliberately distinct from "checked and fine".
-    span.className = 'badge na';
-    span.textContent = 'N/A';
+    // N/A is deliberately distinct from "checked and fine": a data gap must
+    // never render the same way as a clean result.
+    const b = document.createElement('span');
+    b.className = 'badge na';
+    b.textContent = 'N/A';
+    if (flag && flag.reason) b.title = flag.reason;
+    td.appendChild(b);
   } else {
-    span.className = 'badge none';
-    span.textContent = '—';
+    const s = document.createElement('span');
+    s.className = 'badge none';
+    s.textContent = EM_DASH;
+    if (flag && flag.reason) s.title = flag.reason;
+    td.appendChild(s);
   }
-  if (flag && flag.reason) span.title = flag.reason;
-  td.appendChild(span);
   return td;
+}
+
+function renderStats(data) {
+  statsEl.textContent = '';
+  const mk = (value, label, flagged) => {
+    const d = document.createElement('div');
+    d.className = 'stat' + (flagged ? ' is-flagged' : '');
+    const v = document.createElement('span');
+    v.className = 'value'; v.textContent = value;
+    const l = document.createElement('span');
+    l.className = 'label'; l.textContent = label;
+    d.append(v, l);
+    return d;
+  };
+  statsEl.append(
+    mk(data.count, data.count === 1 ? 'Game' : 'Games', false),
+    mk(data.flagged_count, 'Flagged', data.flagged_count > 0),
+  );
 }
 
 function render(data) {
   content.textContent = '';
-  summary.textContent = '';
+  renderStats(data);
 
   if (!data.games.length) {
-    const p = document.createElement('p');
-    p.className = 'state';
-    p.textContent = 'No games scheduled for this date.';
-    content.appendChild(p);
+    showState('No games scheduled', 'There is no MLB action on this date. Try another day.');
     return;
   }
 
-  const strong = document.createElement('strong');
-  strong.textContent = data.count + ' games · ' + data.flagged_count + ' flagged';
-  summary.appendChild(strong);
+  const card = document.createElement('div');
+  card.className = 'card';
+  const scroll = document.createElement('div');
+  scroll.className = 'scroll';
 
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const hrow  = document.createElement('tr');
-  ['Time (ET)', 'Away', 'Home', 'Odds (A / H)', 'Implied % (A / H)', 'Flag'].forEach(h => {
-    const th = document.createElement('th');
-    th.textContent = h;
-    hrow.appendChild(th);
-  });
+  ['Time (ET)', 'Away', 'Home', 'Odds (A / H)', 'Implied % (A / H)', 'Flag']
+    .forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      if (h.startsWith('Implied')) {
+        th.title = 'Includes the bookmaker margin, so the two sides sum to over 100%.';
+      }
+      hrow.appendChild(th);
+    });
   thead.appendChild(hrow);
-  table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
   data.games.forEach(g => {
     const tr = document.createElement('tr');
-    if (g.flag && g.flag.favorite_undervalued === true) tr.className = 'flagged';
+    const flagged = g.flag && g.flag.favorite_undervalued === true;
+    if (flagged) tr.className = 'flagged';
+
+    const better = g.flag ? g.flag.higher_ranked : null;
 
     const t = document.createElement('td');
-    t.className = 'num';
+    t.className = 'num time';
     t.textContent = time(g.start_time);
     tr.appendChild(t);
 
-    tr.appendChild(teamCell(g.away));
-    tr.appendChild(teamCell(g.home));
-
-    const o = document.createElement('td');
-    o.className = 'num';
-    o.textContent = g.odds ? ml(g.odds.away) + ' / ' + ml(g.odds.home) : '—';
-    tr.appendChild(o);
+    tr.appendChild(teamCell(g.away, better === 'away'));
+    tr.appendChild(teamCell(g.home, better === 'home'));
+    tr.appendChild(oddsCell(g.odds));
 
     const ip = document.createElement('td');
     ip.className = 'num';
-    ip.title = 'Includes the bookmaker margin, so the two sides sum to over 100%.';
-    ip.textContent = g.implied ? pct(g.implied.away) + ' / ' + pct(g.implied.home) : '—';
+    ip.textContent = g.implied
+      ? pct(g.implied.away) + '  /  ' + pct(g.implied.home) : EM_DASH;
     tr.appendChild(ip);
 
     tr.appendChild(flagCell(g.flag));
     tbody.appendChild(tr);
   });
-  table.appendChild(tbody);
-  content.appendChild(table);
+
+  table.append(thead, tbody);
+  scroll.appendChild(table);
+  card.appendChild(scroll);
+  content.appendChild(card);
 }
 
-function showState(msg, isError) {
-  summary.textContent = '';
+function showState(title, detail) {
   content.textContent = '';
-  const p = document.createElement('p');
-  p.className = isError ? 'state error' : 'state';
-  p.textContent = msg;
-  content.appendChild(p);
+  const card = document.createElement('div');
+  card.className = 'card';
+  const box = document.createElement('div');
+  box.className = 'state';
+  const t = document.createElement('div');
+  t.className = 'title'; t.textContent = title;
+  const d = document.createElement('div');
+  d.textContent = detail || '';
+  box.append(t, d);
+  card.appendChild(box);
+  content.appendChild(card);
+}
+
+function showLoading() {
+  content.textContent = '';
+  statsEl.textContent = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  const box = document.createElement('div');
+  box.className = 'state';
+  const sp = document.createElement('div');
+  sp.className = 'spinner';
+  const t = document.createElement('div');
+  t.textContent = 'Loading games…';
+  box.append(sp, t);
+  card.appendChild(box);
+  content.appendChild(card);
+}
+
+function showError(msg) {
+  content.textContent = '';
+  statsEl.textContent = '';
+  const box = document.createElement('div');
+  box.className = 'state error';
+  box.appendChild(svg(WARN_ICON, 18)).classList.add('icon');
+  const txt = document.createElement('div');
+  const t = document.createElement('div');
+  t.className = 'title'; t.textContent = 'Something went wrong';
+  const d = document.createElement('div');
+  d.textContent = msg;
+  txt.append(t, d);
+  box.appendChild(txt);
+  content.appendChild(box);
 }
 
 async function load(date) {
-  showState('Loading games…', false);
+  showLoading();
   try {
     const res  = await fetch('/api/games?date=' + encodeURIComponent(date));
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showState(body.detail || 'Request failed (' + res.status + ').', true);
+      showError(body.detail || 'Request failed (' + res.status + ').');
       return;
     }
     render(body);
   } catch (err) {
-    showState('Could not reach the server. Check that it is running, then try again.', true);
+    showError('Could not reach the server. Check that it is running, then try again.');
   }
 }
 

@@ -29,7 +29,9 @@ def test_health():
 def test_index_serves_page_with_mock_banner():
     r = client.get("/")
     assert r.status_code == 200
-    assert "MOCKED" in r.text
+    # Case-insensitive: the point is that the page states the odds are mocked,
+    # not how the banner happens to be capitalised.
+    assert "mocked" in r.text.lower()
 
 
 def test_games_contract(stub_espn):
