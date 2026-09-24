@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports Odds Research Tool</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --line: #e0e0e0;
+    --flag-bg: #fff8e1; --flag-line: #f0b429; --warn-bg: #fff4e5;
+    --warn-fg: #7a4a00; --err-bg: #fdecea; --err-fg: #8b1a10;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --fg: #e8e8e8; --muted: #9aa0a6; --line: #2e3238;
+      --flag-bg: #2e2510; --flag-line: #b8860b; --warn-bg: #2e2510;
+      --warn-fg: #f0c674; --err-bg: #2e1614; --err-fg: #f2a196;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 16px 48px; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .banner {
+    background: var(--warn-bg); color: var(--warn-fg);
+    border: 1px solid var(--flag-line); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0; font-weight: 600;
+  }
+  h1 { font-size: 1.35rem; margin: 20px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  label { font-weight: 600; }
+  input[type=date] {
+    font: inherit; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 5px; background: var(--bg); color: var(--fg);
+  }
+  .summary { color: var(--muted); margin: 12px 0; }
+  .summary strong { color: var(--fg); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.flagged { background: var(--flag-bg); box-shadow: inset 3px 0 0 var(--flag-line); }
+  .rec { color: var(--muted); font-size: .85em; }
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 999px;
+    font-size: .78rem; font-weight: 600; white-space: nowrap; cursor: help;
+  }
+  .badge.flag { background: var(--flag-line); color: #241a00; }
+  .badge.na { background: var(--line); color: var(--muted); }
+  .badge.none { color: var(--muted); }
+  .state { padding: 36px 8px; text-align: center; color: var(--muted); }
+  .state.error {
+    background: var(--err-bg); color: var(--err-fg); border-radius: 6px;
+    text-align: left; padding: 14px 16px;
+  }
+  footer { margin-top: 28px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    &#9888; Odds are MOCKED for demonstration. Game and record data is live from ESPN.
+  </div>
+
+  <h1>Sports Odds Research Tool</h1>
+  <p class="sub">MLB &middot; flags games where the team with the better record is priced as the underdog.</p>
+
+  <div class="controls">
+    <label for="date">Date</label>
+    <input type="date" id="date">
+  </div>
+
+  <div id="summary" class="summary"></div>
+  <div id="content"></div>
+
+  <footer>
+    Not betting advice. Ranking is season win percentage; it ignores injuries,
+    starting pitchers and schedule strength.
+  </footer>
+</div>
+
+<script>
+const content = document.getElementById('content');
+const summary = document.getElementById('summary');
+const picker  = document.getElementById('date');
+
+const pct  = v => v == null ? '—' : (v * 100).toFixed(1) + '%';
+const ml   = v => v > 0 ? '+' + v : String(v);
+const time = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+};
+
+/** Build a cell naming a team, with its record and win % underneath. */
+function teamCell(t) {
+  const td = document.createElement('td');
+  // textContent, never innerHTML: these names come from an external API.
+  td.textContent = t.name || t.abbr || 'Unknown';
+  const rec = document.createElement('div');
+  rec.className = 'rec';
+  rec.textContent = (t.record || 'no record') + ' · ' + pct(t.win_pct);
+  td.appendChild(rec);
+  return td;
+}
+
+function flagCell(flag) {
+  const td = document.createElement('td');
+  const span = document.createElement('span');
+  const state = flag ? flag.favorite_undervalued : null;
+  if (state === true) {
+    span.className = 'badge flag';
+    span.textContent = '⚠ Favorite Undervalued';
+  } else if (state === null) {
+    // N/A is deliberately distinct from "checked and fine".
+    span.className = 'badge na';
+    span.textContent = 'N/A';
+  } else {
+    span.className = 'badge none';
+    span.textContent = '—';
+  }
+  if (flag && flag.reason) span.title = flag.reason;
+  td.appendChild(span);
+  return td;
+}
+
+function render(data) {
+  content.textContent = '';
+  summary.textContent = '';
+
+  if (!data.games.length) {
+    const p = document.createElement('p');
+    p.className = 'state';
+    p.textContent = 'No games scheduled for this date.';
+    content.appendChild(p);
+    return;
+  }
+
+  const strong = document.createElement('strong');
+  strong.textContent = data.count + ' games · ' + data.flagged_count + ' flagged';
+  summary.appendChild(strong);
+
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const hrow  = document.createElement('tr');
+  ['Time', 'Away', 'Home', 'Odds (A / H)', 'Implied % (A / H)', 'Flag'].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  data.games.forEach(g => {
+    const tr = document.createElement('tr');
+    if (g.flag && g.flag.favorite_undervalued === true) tr.className = 'flagged';
+
+    const t = document.createElement('td');
+    t.className = 'num';
+    t.textContent = time(g.start_time);
+    tr.appendChild(t);
+
+    tr.appendChild(teamCell(g.away));
+    tr.appendChild(teamCell(g.home));
+
+    const o = document.createElement('td');
+    o.className = 'num';
+    o.textContent = g.odds ? ml(g.odds.away) + ' / ' + ml(g.odds.home) : '—';
+    tr.appendChild(o);
+
+    const ip = document.createElement('td');
+    ip.className = 'num';
+    ip.title = 'Includes the bookmaker margin, so the two sides sum to over 100%.';
+    ip.textContent = g.implied ? pct(g.implied.away) + ' / ' + pct(g.implied.home) : '—';
+    tr.appendChild(ip);
+
+    tr.appendChild(flagCell(g.flag));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  content.appendChild(table);
+}
+
+function showState(msg, isError) {
+  summary.textContent = '';
+  content.textContent = '';
+  const p = document.createElement('p');
+  p.className = isError ? 'state error' : 'state';
+  p.textContent = msg;
+  content.appendChild(p);
+}
+
+async function load(date) {
+  showState('Loading games…', false);
+  try {
+    const res  = await fetch('/api/games?date=' + encodeURIComponent(date));
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showState(body.detail || 'Request failed (' + res.status + ').', true);
+      return;
+    }
+    render(body);
+  } catch (err) {
+    showState('Could not reach the server. Check that it is running, then try again.', true);
+  }
+}
+
+const today = new Date().toISOString().slice(0, 10);
+picker.value = today;
+picker.addEventListener('change', () => { if (picker.value) load(picker.value); });
+load(today);
+</script>
+</body>
+</html>
