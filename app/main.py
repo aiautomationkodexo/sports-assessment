@@ -4,6 +4,7 @@
 """
 
 import logging
+import pathlib
 from dataclasses import asdict
 from datetime import date, datetime
 
@@ -27,12 +28,16 @@ app = FastAPI(
     title="Sports Odds Research Tool",
     description="Flags MLB games where the better team is priced as the underdog.",
 )
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Resolved from this file rather than the working directory, so the app
+# serves its page identically under uvicorn, Docker and a serverless host.
+STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def index():
-    return FileResponse("static/index.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

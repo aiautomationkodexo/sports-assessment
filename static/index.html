@@ -89,10 +89,16 @@ const picker  = document.getElementById('date');
 
 const pct  = v => v == null ? '—' : (v * 100).toFixed(1) + '%';
 const ml   = v => v > 0 ? '+' + v : String(v);
+// MLB schedules are quoted in US Eastern time, so the table pins itself there
+// rather than following the viewer's locale. Without this, a start time reads
+// as the small hours of the morning to anyone outside North America.
 const time = iso => {
   if (!iso) return '—';
   const d = new Date(iso);
-  return isNaN(d) ? '—' : d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+  if (isNaN(d)) return '—';
+  return d.toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+  });
 };
 
 /** Build a cell naming a team, with its record and win % underneath. */
@@ -146,7 +152,7 @@ function render(data) {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const hrow  = document.createElement('tr');
-  ['Time', 'Away', 'Home', 'Odds (A / H)', 'Implied % (A / H)', 'Flag'].forEach(h => {
+  ['Time (ET)', 'Away', 'Home', 'Odds (A / H)', 'Implied % (A / H)', 'Flag'].forEach(h => {
     const th = document.createElement('th');
     th.textContent = h;
     hrow.appendChild(th);

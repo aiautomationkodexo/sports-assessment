@@ -51,4 +51,10 @@ def favorite_undervalued(game: Game) -> FlagResult:
             f"{better.abbr} has the better record ({better.record}) but the "
             f"market gives them {p_better:.0%} vs {worse.abbr}'s {p_worse:.0%}.",
         )
+    if p_better == p_worse:
+        # A pick'em: the market has priced both sides identically, so it is not
+        # agreeing with the records so much as declining to take a view.
+        return FlagResult(
+            False, side, f"Market prices this as a pick'em despite {better.abbr}'s better record."
+        )
     return FlagResult(False, side, "Market agrees with the records.")

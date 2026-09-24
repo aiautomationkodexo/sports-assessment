@@ -1,0 +1,46 @@
+# Development stack: source is bind-mounted and uvicorn reloads on change,
+# so edits land without a rebuild.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml run --rm test
+
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      # Bind-mounted so code changes are picked up live. Read-only: the app
+      # has no reason to write to its own source.
+      - ./app:/app/app:ro
+      - ./static:/app/static:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0 --port 8000
+      --reload --reload-dir /app/app
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  # Runs the suite inside the image, so we're testing what actually ships
+  # rather than what happens to work on the host.
+  #   docker compose -f docker-compose.dev.yml run --rm test
+  test:
+    build:
+      context: .
+      target: runtime
+    volumes:
+      - ./app:/app/app:ro
+      - ./static:/app/static:ro
+      - ./tests:/app/tests:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    profiles: ["tools"]   # kept out of `up`; run explicitly

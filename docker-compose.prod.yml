@@ -1,0 +1,31 @@
+# Production-ish stack: baked image, no bind mounts, no reload.
+#
+#   docker compose -f docker-compose.prod.yml up --build -d
+#   docker compose -f docker-compose.prod.yml logs -f
+
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: odds-research-tool:latest
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    # The app writes nothing to disk, so the filesystem can be read-only.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
